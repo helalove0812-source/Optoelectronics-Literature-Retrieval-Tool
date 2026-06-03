@@ -1,0 +1,11 @@
+def test_import_skeleton_modules():
+    import paper_crawler.fetchers.arxiv
+    import paper_crawler.fetchers.crossref
+    import paper_crawler.fetchers.openalex
+    import paper_crawler.fetchers.unpaywall
+    import paper_crawler.matchers.keyword_matcher
+    import paper_crawler.matchers.semantic_matcher
+    import paper_crawler.notify.email_renderer
+    import paper_crawler.notify.smtp_sender
+    import paper_crawler.processing.deduplicate
+    import paper_crawler.processing.normalize

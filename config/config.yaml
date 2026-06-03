@@ -1,0 +1,17 @@
+contact_email: team@example.com
+database_url: sqlite:///data/papers.db
+smtp:
+  host: smtp.example.com
+  port: 587
+  username: research-alert@example.com
+  from_address: research-alert@example.com
+runtime:
+  lookback_hours: 24
+  semantic_threshold: 0.5
+  enable_semantic_matching: true
+sources:
+  arxiv_categories:
+    - physics.optics
+    - physics.app-ph
+  openalex_topics:
+    - photonics

@@ -1,0 +1,10 @@
+photodetector:
+  - PD
+  - 光电探测器
+VCSEL:
+  - 垂直腔面发射激光器
+metasurface:
+  - 超表面
+silicon photonics:
+  - SiPh
+  - 硅光
