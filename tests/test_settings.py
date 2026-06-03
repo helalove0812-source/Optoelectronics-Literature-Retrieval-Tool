@@ -10,5 +10,6 @@ def test_load_settings_reads_all_yaml_files():
 
     assert settings.contact_email == "team@example.com"
     assert "physics.optics" in settings.arxiv_categories
+    assert settings.lookback_hours == 24
     assert "silicon photonics" in settings.keyword_groups["硅光"]
     assert settings.issn_whitelist["Optics Express"]["issn"] == "1094-4087"

@@ -6,6 +6,13 @@ def get_schema_path() -> Path:
     return Path(__file__).resolve().parents[3] / "sql" / "schema.sql"
 
 
+def resolve_sqlite_path(database_url: str) -> Path:
+    prefix = "sqlite:///"
+    if not database_url.startswith(prefix):
+        raise ValueError(f"Unsupported database URL: {database_url}")
+    return Path(database_url.removeprefix(prefix))
+
+
 def connect_sqlite(db_path: Path) -> sqlite3.Connection:
     db_path.parent.mkdir(parents=True, exist_ok=True)
     return sqlite3.connect(db_path)

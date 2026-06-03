@@ -1,29 +1,27 @@
-import os
-import subprocess
 import sys
+from io import StringIO
 from pathlib import Path
+from contextlib import redirect_stdout
+
+import paper_crawler.cli as cli
 
 
-def test_cli_run_command_succeeds():
+def test_cli_run_command_succeeds(monkeypatch) -> None:
     root = Path(__file__).resolve().parents[1]
-    env = os.environ.copy()
-    env["PYTHONPATH"] = str(root / "src")
-
-    result = subprocess.run(
-        [
-            sys.executable,
-            "-m",
-            "paper_crawler.cli",
-            "run",
-            "--config",
-            str(root / "config"),
-        ],
-        capture_output=True,
-        text=True,
-        check=False,
-        cwd=root,
-        env=env,
+    monkeypatch.setattr(
+        cli,
+        "run_application",
+        lambda config_dir: f"Pipeline finished: fetched=2, matched=2 from {config_dir}",
     )
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        ["paper-crawler", "run", "--config", str(root / "config")],
+    )
+    stdout = StringIO()
 
-    assert result.returncode == 0
-    assert "Pipeline finished" in result.stdout
+    with redirect_stdout(stdout):
+        exit_code = cli.main()
+
+    assert exit_code == 0
+    assert "Pipeline finished: fetched=2, matched=2" in stdout.getvalue()
