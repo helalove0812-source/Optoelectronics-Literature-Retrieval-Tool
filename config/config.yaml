@@ -7,6 +7,12 @@ smtp:
   from_address: research-alert@example.com
   to_address: user@example.com
   use_tls: true
+llm:
+  enabled: false
+  provider: deepseek
+  base_url: https://api.deepseek.com
+  model: deepseek-chat
+  timeout_seconds: 30
 runtime:
   lookback_hours: 24
   semantic_threshold: 0.5
