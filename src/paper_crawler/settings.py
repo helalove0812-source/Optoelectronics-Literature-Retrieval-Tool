@@ -10,6 +10,7 @@ class Settings:
     contact_email: str
     database_url: str
     arxiv_categories: list[str]
+    openalex_filters: list[str]
     lookback_hours: int
     keyword_groups: dict[str, list[str]]
     issn_whitelist: dict[str, dict[str, Any]]
@@ -35,6 +36,7 @@ def load_settings(config_dir: Path) -> Settings:
         contact_email=config["contact_email"],
         database_url=config["database_url"],
         arxiv_categories=sources["arxiv_categories"],
+        openalex_filters=sources.get("openalex_filters", []),
         lookback_hours=int(runtime["lookback_hours"]),
         keyword_groups=keywords,
         issn_whitelist=issn_whitelist,

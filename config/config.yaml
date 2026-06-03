@@ -13,5 +13,5 @@ sources:
   arxiv_categories:
     - physics.optics
     - physics.app-ph
-  openalex_topics:
+  openalex_filters:
     - photonics
