@@ -16,10 +16,20 @@ class SMTPSettings:
 
 
 @dataclass
+class LLMSettings:
+    enabled: bool
+    provider: str
+    base_url: str
+    model: str
+    timeout_seconds: int
+
+
+@dataclass
 class Settings:
     contact_email: str
     database_url: str
     smtp: SMTPSettings
+    llm: LLMSettings
     arxiv_categories: list[str]
     openalex_filters: list[str]
     lookback_hours: int
@@ -43,6 +53,7 @@ def load_settings(config_dir: Path) -> Settings:
     runtime = config["runtime"]
     sources = config["sources"]
     smtp = config["smtp"]
+    llm = config.get("llm", {})
 
     return Settings(
         contact_email=config["contact_email"],
@@ -54,6 +65,13 @@ def load_settings(config_dir: Path) -> Settings:
             from_address=smtp["from_address"],
             to_address=smtp["to_address"],
             use_tls=bool(smtp.get("use_tls", True)),
+        ),
+        llm=LLMSettings(
+            enabled=bool(llm.get("enabled", False)),
+            provider=str(llm.get("provider", "deepseek")),
+            base_url=str(llm.get("base_url", "https://api.deepseek.com")),
+            model=str(llm.get("model", "deepseek-chat")),
+            timeout_seconds=int(llm.get("timeout_seconds", 30)),
         ),
         arxiv_categories=sources["arxiv_categories"],
         openalex_filters=sources.get("openalex_filters", []),

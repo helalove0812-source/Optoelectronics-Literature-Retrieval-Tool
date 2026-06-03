@@ -10,7 +10,8 @@ CREATE TABLE IF NOT EXISTS papers (
     pdf_url TEXT,
     access TEXT NOT NULL,
     matched_keywords_json TEXT NOT NULL,
-    semantic_score REAL
+    semantic_score REAL,
+    zh_summary TEXT
 );
 
 CREATE TABLE IF NOT EXISTS push_log (

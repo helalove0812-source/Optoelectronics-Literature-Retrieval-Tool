@@ -16,3 +16,4 @@ class PaperRecord:
     access: str = "subscription"
     matched_keywords: list[str] = field(default_factory=list)
     semantic_score: float | None = None
+    zh_summary: str | None = None

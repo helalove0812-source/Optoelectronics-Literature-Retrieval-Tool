@@ -12,6 +12,11 @@ def render_email_summary(records: list[PaperRecord]) -> str:
     ]
 
     for index, record in enumerate(records, start=1):
+        summary_line = (
+            f"中文总结: {record.zh_summary}"
+            if record.zh_summary
+            else f"Abstract: {record.abstract or 'N/A'}"
+        )
         lines.extend(
             [
                 f"## {index}. {record.title}",
@@ -23,7 +28,7 @@ def render_email_summary(records: list[PaperRecord]) -> str:
                 f"Access: {record.access}",
                 f"Landing URL: {record.landing_url}",
                 f"PDF URL: {record.pdf_url or '需订阅'}",
-                f"Abstract: {record.abstract or 'N/A'}",
+                summary_line,
                 "",
             ]
         )

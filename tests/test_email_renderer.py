@@ -1,4 +1,4 @@
-from datetime import UTC, datetime
+from datetime import datetime, timezone
 
 from paper_crawler.models import PaperRecord
 from paper_crawler.notify.email_renderer import render_email_summary
@@ -10,9 +10,10 @@ def test_render_email_summary_renders_single_record() -> None:
         title="Silicon photonics coherent transceiver",
         authors=["Alice Smith", "Bob Chen"],
         abstract="A compact coherent transceiver for datacenter optics.",
+        zh_summary="面向数据中心光互连的紧凑型相干收发器。",
         doi="10.1000/example",
         source="crossref",
-        published_at=datetime(2026, 6, 3, 10, 0, tzinfo=UTC),
+        published_at=datetime(2026, 6, 3, 10, 0, tzinfo=timezone.utc),
         landing_url="https://doi.org/10.1000/example",
         pdf_url="https://example.com/paper.pdf",
         access="open",
@@ -27,6 +28,8 @@ def test_render_email_summary_renders_single_record() -> None:
     assert "Alice Smith, Bob Chen" in body
     assert "Matched Keywords: 硅光" in body
     assert "PDF URL: https://example.com/paper.pdf" in body
+    assert "中文总结: 面向数据中心光互连的紧凑型相干收发器。" in body
+    assert "Abstract: A compact coherent transceiver for datacenter optics." not in body
 
 
 def test_render_email_summary_renders_subscription_marker() -> None:
@@ -37,7 +40,7 @@ def test_render_email_summary_renders_subscription_marker() -> None:
         abstract="Electrochemistry only.",
         doi=None,
         source="openalex",
-        published_at=datetime(2026, 6, 3, 11, 0, tzinfo=UTC),
+        published_at=datetime(2026, 6, 3, 11, 0, tzinfo=timezone.utc),
         landing_url="https://openalex.org/W123",
         pdf_url=None,
         access="subscription",
@@ -48,3 +51,5 @@ def test_render_email_summary_renders_subscription_marker() -> None:
 
     assert "Access: subscription" in body
     assert "PDF URL: 需订阅" in body
+    assert "Abstract: Electrochemistry only." in body
+    assert "中文总结:" not in body

@@ -6,7 +6,7 @@ from pathlib import Path
 from paper_crawler.fetchers.base import FetchResult
 from paper_crawler.models import PaperRecord
 from paper_crawler.processing.pipeline import run_pipeline
-from paper_crawler.settings import SMTPSettings, Settings
+from paper_crawler.settings import LLMSettings, SMTPSettings, Settings
 
 
 class DummyArxivFetcher:
@@ -65,6 +65,13 @@ def build_settings() -> Settings:
             from_address="research-alert@example.com",
             to_address="user@example.com",
             use_tls=True,
+        ),
+        llm=LLMSettings(
+            enabled=False,
+            provider="deepseek",
+            base_url="https://api.deepseek.com",
+            model="deepseek-chat",
+            timeout_seconds=30,
         ),
         arxiv_categories=["physics.optics"],
         openalex_filters=["concepts.id:C123"],

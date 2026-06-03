@@ -18,8 +18,23 @@ def connect_sqlite(db_path: Path) -> sqlite3.Connection:
     return sqlite3.connect(db_path)
 
 
+def _has_column(
+    connection: sqlite3.Connection,
+    table_name: str,
+    column_name: str,
+) -> bool:
+    rows = connection.execute(f"PRAGMA table_info({table_name})").fetchall()
+    return any(row[1] == column_name for row in rows)
+
+
+def _run_lightweight_migrations(connection: sqlite3.Connection) -> None:
+    if not _has_column(connection, "papers", "zh_summary"):
+        connection.execute("ALTER TABLE papers ADD COLUMN zh_summary TEXT")
+
+
 def initialize_database(db_path: Path) -> None:
     schema = get_schema_path().read_text(encoding="utf-8")
 
     with connect_sqlite(db_path) as connection:
         connection.executescript(schema)
+        _run_lightweight_migrations(connection)

@@ -32,8 +32,9 @@ class PaperRepository:
                 pdf_url,
                 access,
                 matched_keywords_json,
-                semantic_score
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                semantic_score,
+                zh_summary
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 record.paper_id,
@@ -48,9 +49,16 @@ class PaperRepository:
                 record.access,
                 json.dumps(record.matched_keywords, ensure_ascii=False),
                 record.semantic_score,
+                record.zh_summary,
             ),
         )
         return cursor.rowcount == 1
+
+    def update_zh_summary(self, paper_id: str, zh_summary: str) -> None:
+        self._connection.execute(
+            "UPDATE papers SET zh_summary = ? WHERE paper_id = ?",
+            (zh_summary, paper_id),
+        )
 
 
 class PushLogRepository:
