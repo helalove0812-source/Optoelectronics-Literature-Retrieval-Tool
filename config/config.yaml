@@ -5,6 +5,8 @@ smtp:
   port: 587
   username: research-alert@example.com
   from_address: research-alert@example.com
+  to_address: user@example.com
+  use_tls: true
 runtime:
   lookback_hours: 24
   semantic_threshold: 0.5

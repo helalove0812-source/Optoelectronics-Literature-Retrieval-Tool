@@ -6,7 +6,7 @@ from pathlib import Path
 from paper_crawler.fetchers.base import FetchResult
 from paper_crawler.models import PaperRecord
 from paper_crawler.processing.pipeline import run_pipeline
-from paper_crawler.settings import Settings
+from paper_crawler.settings import SMTPSettings, Settings
 
 
 class DummyArxivFetcher:
@@ -58,6 +58,14 @@ def build_settings() -> Settings:
     return Settings(
         contact_email="team@example.com",
         database_url="sqlite:///data/papers.db",
+        smtp=SMTPSettings(
+            host="smtp.example.com",
+            port=587,
+            username="research-alert@example.com",
+            from_address="research-alert@example.com",
+            to_address="user@example.com",
+            use_tls=True,
+        ),
         arxiv_categories=["physics.optics"],
         openalex_filters=["concepts.id:C123"],
         keyword_groups={"硅光": ["silicon photonics"]},
@@ -260,6 +268,39 @@ def test_run_pipeline_populates_matched_keywords_and_counts_only_matches(
     assert unmatched_record.matched_keywords == []
     assert result.fetched_count == 2
     assert result.matched_count == 1
+
+
+def test_run_pipeline_returns_matched_records(tmp_path: Path) -> None:
+    settings = build_settings()
+    settings.database_url = f"sqlite:///{tmp_path / 'papers.db'}"
+
+    matched_record = build_record()
+    matched_record.paper_id = "paper-match"
+    matched_record.title = "Silicon photonics coherent link packaging"
+    matched_record.abstract = "Photonics integration for datacenter optics."
+
+    unmatched_record = build_record()
+    unmatched_record.paper_id = "paper-unmatched"
+    unmatched_record.title = "Battery chemistry advances"
+    unmatched_record.abstract = "Electrochemistry only."
+
+    result = run_pipeline(
+        settings,
+        arxiv_fetcher_factory=lambda _: DummyArxivFetcher(
+            FetchResult(source="arxiv", records=[matched_record, unmatched_record])
+        ),
+        crossref_fetcher_factory=lambda _: DummyCrossrefFetcher(
+            FetchResult(source="crossref")
+        ),
+        openalex_fetcher_factory=lambda _: DummyOpenAlexFetcher(
+            FetchResult(source="openalex")
+        ),
+        unpaywall_client_factory=lambda _: DummyUnpaywallClient(
+            {"is_oa": False, "pdf_url": None, "landing_url": None}
+        ),
+    )
+
+    assert [record.paper_id for record in result.matched_records] == ["paper-match"]
 
 
 def test_run_pipeline_persists_matched_keyword_group_names_json(

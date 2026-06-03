@@ -7,6 +7,7 @@ from paper_crawler.fetchers.crossref import CrossrefFetcher
 from paper_crawler.fetchers.openalex import OpenAlexFetcher
 from paper_crawler.fetchers.unpaywall import UnpaywallClient
 from paper_crawler.matchers.keyword_matcher import build_keyword_index, match_keywords
+from paper_crawler.models import PaperRecord
 from paper_crawler.settings import Settings
 from paper_crawler.storage import (
     PaperRepository,
@@ -20,6 +21,7 @@ from paper_crawler.storage import (
 class PipelineResult:
     fetched_count: int
     matched_count: int
+    matched_records: list[PaperRecord]
 
 
 def build_arxiv_fetcher(settings: Settings) -> ArxivFetcher:
@@ -81,10 +83,11 @@ def run_pipeline(
         logging.getLogger(__name__).warning("OpenAlex fetch failed: %s", exc)
 
     if not records:
-        return PipelineResult(fetched_count=0, matched_count=0)
+        return PipelineResult(fetched_count=0, matched_count=0, matched_records=[])
 
     keyword_index = build_keyword_index(settings.keyword_groups, settings.synonyms)
     matched_count = 0
+    matched_records: list[PaperRecord] = []
     unpaywall_client: UnpaywallClient | None = None
     for record in records:
         record.matched_keywords = match_keywords(
@@ -94,6 +97,7 @@ def run_pipeline(
         )
         if record.matched_keywords:
             matched_count += 1
+            matched_records.append(record)
         if not record.matched_keywords or not record.doi or record.source == "arxiv":
             continue
 
@@ -124,4 +128,8 @@ def run_pipeline(
         connection.commit()
 
     fetched_count = len(records)
-    return PipelineResult(fetched_count=fetched_count, matched_count=matched_count)
+    return PipelineResult(
+        fetched_count=fetched_count,
+        matched_count=matched_count,
+        matched_records=matched_records,
+    )

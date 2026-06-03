@@ -6,9 +6,20 @@ import yaml
 
 
 @dataclass
+class SMTPSettings:
+    host: str
+    port: int
+    username: str
+    from_address: str
+    to_address: str
+    use_tls: bool
+
+
+@dataclass
 class Settings:
     contact_email: str
     database_url: str
+    smtp: SMTPSettings
     arxiv_categories: list[str]
     openalex_filters: list[str]
     lookback_hours: int
@@ -31,10 +42,19 @@ def load_settings(config_dir: Path) -> Settings:
     synonyms = _read_yaml(config_dir / "synonyms.yaml")
     runtime = config["runtime"]
     sources = config["sources"]
+    smtp = config["smtp"]
 
     return Settings(
         contact_email=config["contact_email"],
         database_url=config["database_url"],
+        smtp=SMTPSettings(
+            host=smtp["host"],
+            port=int(smtp["port"]),
+            username=smtp["username"],
+            from_address=smtp["from_address"],
+            to_address=smtp["to_address"],
+            use_tls=bool(smtp.get("use_tls", True)),
+        ),
         arxiv_categories=sources["arxiv_categories"],
         openalex_filters=sources.get("openalex_filters", []),
         lookback_hours=int(runtime["lookback_hours"]),
