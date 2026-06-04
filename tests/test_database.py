@@ -69,15 +69,39 @@ def test_push_log_repository_marks_papers_as_pushed(tmp_path: Path):
     with connect_sqlite(db_path) as connection:
         repository = PushLogRepository(connection)
 
-        assert repository.has_been_pushed("paper-1") is False
+        assert (
+            repository.has_been_pushed(
+                paper_id="paper-1",
+                topic_id="optoelectronics",
+                subscriber_email="zhangsan@example.com",
+            )
+            is False
+        )
 
         repository.mark_pushed(
             paper_id="paper-1",
+            topic_id="optoelectronics",
+            subscriber_email="zhangsan@example.com",
             pushed_at=datetime(2026, 6, 3, 8, 30, tzinfo=UTC),
             channel="email",
         )
 
-        assert repository.has_been_pushed("paper-1") is True
+        assert (
+            repository.has_been_pushed(
+                paper_id="paper-1",
+                topic_id="optoelectronics",
+                subscriber_email="zhangsan@example.com",
+            )
+            is True
+        )
+        assert (
+            repository.has_been_pushed(
+                paper_id="paper-1",
+                topic_id="optoelectronics",
+                subscriber_email="lisi@example.com",
+            )
+            is False
+        )
 
 
 def test_paper_repository_persists_and_updates_zh_summary(tmp_path: Path):
@@ -150,3 +174,31 @@ def test_initialize_database_adds_zh_summary_column_to_existing_papers_table(
         }
 
     assert "zh_summary" in columns
+
+
+def test_initialize_database_adds_push_log_topic_and_subscriber_columns(
+    tmp_path: Path,
+):
+    db_path = tmp_path / "legacy.db"
+
+    with sqlite3.connect(db_path) as connection:
+        connection.execute(
+            """
+            CREATE TABLE push_log (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                paper_id TEXT NOT NULL,
+                pushed_at TEXT NOT NULL,
+                channel TEXT NOT NULL
+            )
+            """
+        )
+
+    initialize_database(db_path)
+
+    with sqlite3.connect(db_path) as connection:
+        columns = {
+            row[1] for row in connection.execute("PRAGMA table_info(push_log)")
+        }
+
+    assert "topic_id" in columns
+    assert "subscriber_email" in columns

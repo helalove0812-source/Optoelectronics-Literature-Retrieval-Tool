@@ -65,10 +65,22 @@ class PushLogRepository:
     def __init__(self, connection: sqlite3.Connection) -> None:
         self._connection = connection
 
-    def has_been_pushed(self, paper_id: str) -> bool:
+    def has_been_pushed(
+        self,
+        paper_id: str,
+        topic_id: str = "",
+        subscriber_email: str = "",
+    ) -> bool:
         row = self._connection.execute(
-            "SELECT 1 FROM push_log WHERE paper_id = ? LIMIT 1",
-            (paper_id,),
+            """
+            SELECT 1
+            FROM push_log
+            WHERE paper_id = ?
+              AND topic_id = ?
+              AND subscriber_email = ?
+            LIMIT 1
+            """,
+            (paper_id, topic_id, subscriber_email),
         ).fetchone()
         return row is not None
 
@@ -77,8 +89,24 @@ class PushLogRepository:
         paper_id: str,
         pushed_at: datetime,
         channel: str,
+        topic_id: str = "",
+        subscriber_email: str = "",
     ) -> None:
         self._connection.execute(
-            "INSERT INTO push_log (paper_id, pushed_at, channel) VALUES (?, ?, ?)",
-            (paper_id, pushed_at.isoformat(), channel),
+            """
+            INSERT INTO push_log (
+                paper_id,
+                topic_id,
+                subscriber_email,
+                pushed_at,
+                channel
+            ) VALUES (?, ?, ?, ?, ?)
+            """,
+            (
+                paper_id,
+                topic_id,
+                subscriber_email,
+                pushed_at.isoformat(),
+                channel,
+            ),
         )

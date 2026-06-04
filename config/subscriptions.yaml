@@ -1,0 +1,7 @@
+subscriptions:
+  - name: 示例成员
+    email: member@example.com
+    topic_id: optoelectronics
+    keywords:
+      - optical interconnect
+      - silicon photonics

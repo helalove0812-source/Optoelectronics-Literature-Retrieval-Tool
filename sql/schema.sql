@@ -17,6 +17,8 @@ CREATE TABLE IF NOT EXISTS papers (
 CREATE TABLE IF NOT EXISTS push_log (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     paper_id TEXT NOT NULL,
+    topic_id TEXT NOT NULL DEFAULT '',
+    subscriber_email TEXT NOT NULL DEFAULT '',
     pushed_at TEXT NOT NULL,
     channel TEXT NOT NULL
 );

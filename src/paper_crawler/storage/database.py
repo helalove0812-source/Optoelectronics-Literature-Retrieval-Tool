@@ -30,6 +30,14 @@ def _has_column(
 def _run_lightweight_migrations(connection: sqlite3.Connection) -> None:
     if not _has_column(connection, "papers", "zh_summary"):
         connection.execute("ALTER TABLE papers ADD COLUMN zh_summary TEXT")
+    if not _has_column(connection, "push_log", "topic_id"):
+        connection.execute(
+            "ALTER TABLE push_log ADD COLUMN topic_id TEXT NOT NULL DEFAULT ''"
+        )
+    if not _has_column(connection, "push_log", "subscriber_email"):
+        connection.execute(
+            "ALTER TABLE push_log ADD COLUMN subscriber_email TEXT NOT NULL DEFAULT ''"
+        )
 
 
 def initialize_database(db_path: Path) -> None:

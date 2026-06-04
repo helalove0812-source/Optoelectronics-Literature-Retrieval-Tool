@@ -12,6 +12,11 @@ from paper_crawler.processing.pipeline import PipelineResult
 from paper_crawler.settings import LLMSettings, SMTPSettings, Settings
 from paper_crawler.storage.database import connect_sqlite, initialize_database
 from paper_crawler.storage.repositories import PaperRepository
+from paper_crawler.subscriptions import (
+    LabSubscriptions,
+    SubscriptionConfig,
+    TopicConfig,
+)
 
 
 class DummySender:
@@ -110,6 +115,51 @@ def build_record(
     )
 
 
+def build_topic(
+    *,
+    topic_id: str = "optoelectronics",
+    name: str = "光电子",
+    arxiv_categories: list[str] | None = None,
+    openalex_filters: list[str] | None = None,
+    keyword_groups: dict[str, list[str]] | None = None,
+) -> TopicConfig:
+    return TopicConfig(
+        topic_id=topic_id,
+        name=name,
+        arxiv_categories=arxiv_categories or ["physics.optics"],
+        openalex_filters=openalex_filters or ["photonics"],
+        keyword_groups=keyword_groups or {"lab": ["硅光"]},
+        synonyms={},
+    )
+
+
+def build_subscription(
+    *,
+    name: str = "订阅人",
+    email: str = "user@example.com",
+    topic_id: str = "optoelectronics",
+    keywords: list[str] | None = None,
+) -> SubscriptionConfig:
+    return SubscriptionConfig(
+        name=name,
+        email=email,
+        topic_id=topic_id,
+        keywords=keywords or ["硅光"],
+    )
+
+
+def build_lab_subscriptions(
+    *,
+    topic: TopicConfig | None = None,
+    subscriptions: list[SubscriptionConfig] | None = None,
+) -> LabSubscriptions:
+    topic = topic or build_topic()
+    return LabSubscriptions(
+        topics={topic.topic_id: topic},
+        subscriptions=subscriptions or [build_subscription(topic_id=topic.topic_id)],
+    )
+
+
 def seed_records(db_path: Path, *records: PaperRecord) -> None:
     with connect_sqlite(db_path) as connection:
         repository = PaperRepository(connection)
@@ -124,6 +174,11 @@ def test_run_application_sends_unpushed_records_and_marks_them(
     db_path = tmp_path / "papers.db"
     initialize_database(db_path)
     sender = DummySender()
+    subscriptions = build_lab_subscriptions(
+        subscriptions=[
+            build_subscription(name="订阅人", email="user@example.com", keywords=["硅光"])
+        ]
+    )
     rendered: dict[str, list[str]] = {}
     pushed_at = datetime(2026, 6, 3, 12, 0, tzinfo=UTC)
 
@@ -137,6 +192,7 @@ def test_run_application_sends_unpushed_records_and_marks_them(
         pipeline_runner=lambda settings: build_pipeline_result(),
         email_renderer=renderer,
         email_sender=sender,
+        subscriptions_loader=lambda _: subscriptions,
         smtp_password_getter=lambda: "secret",
         now_func=lambda: pushed_at,
     )
@@ -148,28 +204,47 @@ def test_run_application_sends_unpushed_records_and_marks_them(
     assert rendered["paper_ids"] == ["paper-1", "paper-2"]
     assert len(sender.calls) == 1
     config, subject, body = sender.calls[0]
-    assert subject == "Daily paper digest (2)"
+    assert subject == "Daily paper digest for 订阅人 - 光电子 (2)"
     assert body == "Matched papers: 2"
     assert config.password == "secret"
+    assert config.to_address == "user@example.com"
 
     with sqlite3.connect(db_path) as connection:
         rows = connection.execute(
-            "SELECT paper_id, pushed_at, channel FROM push_log ORDER BY paper_id"
+            """
+            SELECT paper_id, topic_id, subscriber_email, pushed_at, channel
+            FROM push_log
+            ORDER BY paper_id
+            """
         ).fetchall()
 
     assert rows == [
-        ("paper-1", pushed_at.isoformat(), "email"),
-        ("paper-2", pushed_at.isoformat(), "email"),
+        ("paper-1", "optoelectronics", "user@example.com", pushed_at.isoformat(), "email"),
+        ("paper-2", "optoelectronics", "user@example.com", pushed_at.isoformat(), "email"),
     ]
 
 
 def test_run_application_skips_already_pushed_records(tmp_path: Path) -> None:
     db_path = tmp_path / "papers.db"
     initialize_database(db_path)
+    subscriptions = build_lab_subscriptions(
+        subscriptions=[
+            build_subscription(name="订阅人", email="user@example.com", keywords=["硅光"])
+        ]
+    )
     with sqlite3.connect(db_path) as connection:
         connection.execute(
-            "INSERT INTO push_log (paper_id, pushed_at, channel) VALUES (?, ?, ?)",
-            ("paper-1", datetime(2026, 6, 3, 8, 0, tzinfo=UTC).isoformat(), "email"),
+            """
+            INSERT INTO push_log (paper_id, topic_id, subscriber_email, pushed_at, channel)
+            VALUES (?, ?, ?, ?, ?)
+            """,
+            (
+                "paper-1",
+                "optoelectronics",
+                "user@example.com",
+                datetime(2026, 6, 3, 8, 0, tzinfo=UTC).isoformat(),
+                "email",
+            ),
         )
         connection.commit()
 
@@ -186,6 +261,7 @@ def test_run_application_skips_already_pushed_records(tmp_path: Path) -> None:
         pipeline_runner=lambda settings: build_pipeline_result(),
         email_renderer=renderer,
         email_sender=sender,
+        subscriptions_loader=lambda _: subscriptions,
         smtp_password_getter=lambda: "secret",
         now_func=lambda: datetime(2026, 6, 3, 12, 0, tzinfo=UTC),
     )
@@ -194,7 +270,7 @@ def test_run_application_skips_already_pushed_records(tmp_path: Path) -> None:
     assert "email_sent=yes" in summary
     assert rendered["paper_ids"] == ["paper-2"]
     assert len(sender.calls) == 1
-    assert sender.calls[0][1] == "Daily paper digest (1)"
+    assert sender.calls[0][1] == "Daily paper digest for 订阅人 - 光电子 (1)"
     assert sender.calls[0][2] == "Matched papers: 1"
 
     with sqlite3.connect(db_path) as connection:
@@ -210,13 +286,21 @@ def test_run_application_does_not_send_empty_email_when_no_records_to_push(
 ) -> None:
     db_path = tmp_path / "papers.db"
     initialize_database(db_path)
+    subscriptions = build_lab_subscriptions(
+        subscriptions=[
+            build_subscription(name="订阅人", email="user@example.com", keywords=["硅光"])
+        ]
+    )
     pushed_at = datetime(2026, 6, 3, 8, 0, tzinfo=UTC).isoformat()
     with sqlite3.connect(db_path) as connection:
         connection.executemany(
-            "INSERT INTO push_log (paper_id, pushed_at, channel) VALUES (?, ?, ?)",
+            """
+            INSERT INTO push_log (paper_id, topic_id, subscriber_email, pushed_at, channel)
+            VALUES (?, ?, ?, ?, ?)
+            """,
             [
-                ("paper-1", pushed_at, "email"),
-                ("paper-2", pushed_at, "email"),
+                ("paper-1", "optoelectronics", "user@example.com", pushed_at, "email"),
+                ("paper-2", "optoelectronics", "user@example.com", pushed_at, "email"),
             ],
         )
         connection.commit()
@@ -235,6 +319,7 @@ def test_run_application_does_not_send_empty_email_when_no_records_to_push(
         pipeline_runner=lambda settings: build_pipeline_result(),
         email_renderer=renderer,
         email_sender=sender,
+        subscriptions_loader=lambda _: subscriptions,
         smtp_password_getter=lambda: "secret",
         now_func=lambda: datetime(2026, 6, 3, 12, 0, tzinfo=UTC),
     )
@@ -253,14 +338,28 @@ def test_run_application_summarizes_only_to_push_records_without_existing_summar
 ) -> None:
     db_path = tmp_path / "papers.db"
     initialize_database(db_path)
+    subscriptions = build_lab_subscriptions(
+        subscriptions=[
+            build_subscription(name="订阅人", email="user@example.com", keywords=["硅光"])
+        ]
+    )
     paper_1 = build_record("paper-1")
     paper_2 = build_record("paper-2", zh_summary="已有中文总结")
     paper_3 = build_record("paper-3")
     seed_records(db_path, paper_1, paper_2, paper_3)
     with sqlite3.connect(db_path) as connection:
         connection.execute(
-            "INSERT INTO push_log (paper_id, pushed_at, channel) VALUES (?, ?, ?)",
-            ("paper-1", datetime(2026, 6, 3, 8, 0, tzinfo=UTC).isoformat(), "email"),
+            """
+            INSERT INTO push_log (paper_id, topic_id, subscriber_email, pushed_at, channel)
+            VALUES (?, ?, ?, ?, ?)
+            """,
+            (
+                "paper-1",
+                "optoelectronics",
+                "user@example.com",
+                datetime(2026, 6, 3, 8, 0, tzinfo=UTC).isoformat(),
+                "email",
+            ),
         )
         connection.commit()
 
@@ -283,6 +382,7 @@ def test_run_application_summarizes_only_to_push_records_without_existing_summar
         email_renderer=renderer,
         email_sender=sender,
         summary_client_builder=lambda settings: summary_client,
+        subscriptions_loader=lambda _: subscriptions,
         smtp_password_getter=lambda: "secret",
         now_func=lambda: datetime(2026, 6, 3, 12, 0, tzinfo=UTC),
     )
@@ -312,6 +412,11 @@ def test_run_application_continues_when_single_summary_generation_fails(
 ) -> None:
     db_path = tmp_path / "papers.db"
     initialize_database(db_path)
+    subscriptions = build_lab_subscriptions(
+        subscriptions=[
+            build_subscription(name="订阅人", email="user@example.com", keywords=["硅光"])
+        ]
+    )
     paper_1 = build_record("paper-1")
     paper_2 = build_record("paper-2")
     seed_records(db_path, paper_1, paper_2)
@@ -337,6 +442,7 @@ def test_run_application_continues_when_single_summary_generation_fails(
             email_renderer=renderer,
             email_sender=sender,
             summary_client_builder=lambda settings: summary_client,
+            subscriptions_loader=lambda _: subscriptions,
             smtp_password_getter=lambda: "secret",
             now_func=lambda: datetime(2026, 6, 3, 12, 0, tzinfo=UTC),
         )
@@ -370,6 +476,11 @@ def test_run_application_does_not_write_push_log_when_email_fails_but_keeps_summ
 ) -> None:
     db_path = tmp_path / "papers.db"
     initialize_database(db_path)
+    subscriptions = build_lab_subscriptions(
+        subscriptions=[
+            build_subscription(name="订阅人", email="user@example.com", keywords=["硅光"])
+        ]
+    )
     paper_1 = build_record("paper-1")
     paper_2 = build_record("paper-2", zh_summary="已有中文总结")
     seed_records(db_path, paper_1, paper_2)
@@ -388,6 +499,7 @@ def test_run_application_does_not_write_push_log_when_email_fails_but_keeps_summ
             pipeline_runner=lambda settings: build_pipeline_result(paper_1, paper_2),
             email_sender=sender,
             summary_client_builder=lambda settings: summary_client,
+            subscriptions_loader=lambda _: subscriptions,
             smtp_password_getter=lambda: "secret",
             now_func=lambda: datetime(2026, 6, 3, 12, 0, tzinfo=UTC),
         )
@@ -407,3 +519,166 @@ def test_run_application_does_not_write_push_log_when_email_fails_but_keeps_summ
         ("paper-2", "已有中文总结"),
     ]
     assert push_log_count == 0
+
+
+def test_run_application_sends_same_paper_to_different_subscribers(tmp_path: Path) -> None:
+    db_path = tmp_path / "papers.db"
+    initialize_database(db_path)
+    sender = DummySender()
+    rendered: list[list[tuple[str, str | None]]] = []
+    summary_client = DummySummaryClient(
+        responses={"paper-1": "这是 paper-1 的中文总结。"}
+    )
+    paper = build_record("paper-1", matched_keywords=["silicon photonics"])
+    topic = build_topic(keyword_groups={"silicon": ["silicon photonics"]})
+    subscriptions = build_lab_subscriptions(
+        topic=topic,
+        subscriptions=[
+            SubscriptionConfig(
+                name="张三",
+                email="zhangsan@example.com",
+                topic_id="optoelectronics",
+                keywords=["silicon photonics"],
+            ),
+            SubscriptionConfig(
+                name="李四",
+                email="lisi@example.com",
+                topic_id="optoelectronics",
+                keywords=["silicon photonics"],
+            ),
+        ],
+    )
+
+    def renderer(records: list[PaperRecord]) -> str:
+        rendered.append([(record.paper_id, record.zh_summary) for record in records])
+        return f"Matched papers: {len(records)}"
+
+    summary = run_application(
+        tmp_path,
+        settings_loader=lambda _: build_settings_for_main(db_path, llm_enabled=True),
+        pipeline_runner=lambda settings: build_pipeline_result(paper),
+        email_renderer=renderer,
+        email_sender=sender,
+        summary_client_builder=lambda settings: summary_client,
+        subscriptions_loader=lambda _: subscriptions,
+        smtp_password_getter=lambda: "secret",
+        now_func=lambda: datetime(2026, 6, 4, 13, 0, tzinfo=UTC),
+    )
+
+    assert "email_sent=yes" in summary
+    assert "to_push=2" in summary
+    assert len(sender.calls) == 2
+    assert {call[0].to_address for call in sender.calls} == {
+        "zhangsan@example.com",
+        "lisi@example.com",
+    }
+    assert summary_client.calls == ["paper-1"]
+    assert rendered == [
+        [("paper-1", "这是 paper-1 的中文总结。")],
+        [("paper-1", "这是 paper-1 的中文总结。")],
+    ]
+
+
+def test_run_application_skips_empty_subscriber_digest(tmp_path: Path) -> None:
+    db_path = tmp_path / "papers.db"
+    initialize_database(db_path)
+    sender = DummySender()
+    paper = build_record("paper-1", matched_keywords=["silicon photonics"])
+    topic = build_topic(keyword_groups={"silicon": ["silicon photonics"]})
+    subscriptions = build_lab_subscriptions(
+        topic=topic,
+        subscriptions=[
+            SubscriptionConfig(
+                name="张三",
+                email="zhangsan@example.com",
+                topic_id="optoelectronics",
+                keywords=["vcsel"],
+            ),
+        ],
+    )
+
+    summary = run_application(
+        tmp_path,
+        settings_loader=lambda _: build_settings_for_main(db_path),
+        pipeline_runner=lambda settings: build_pipeline_result(paper),
+        email_sender=sender,
+        subscriptions_loader=lambda _: subscriptions,
+        smtp_password_getter=lambda: "secret",
+        now_func=lambda: datetime(2026, 6, 4, 13, 0, tzinfo=UTC),
+    )
+
+    assert "email_sent=no" in summary
+    assert sender.calls == []
+
+
+def test_run_application_runs_pipeline_grouped_by_topic(tmp_path: Path) -> None:
+    db_path = tmp_path / "papers.db"
+    initialize_database(db_path)
+    sender = DummySender()
+    seen_categories: list[tuple[str, ...]] = []
+
+    optics_topic = build_topic(
+        topic_id="optoelectronics",
+        name="光电子",
+        arxiv_categories=["physics.optics"],
+        openalex_filters=["photonics"],
+        keyword_groups={"silicon": ["silicon photonics"]},
+    )
+    laser_topic = build_topic(
+        topic_id="lasers",
+        name="激光",
+        arxiv_categories=["physics.app-ph"],
+        openalex_filters=["lasers"],
+        keyword_groups={"laser": ["laser"]},
+    )
+    subscriptions = LabSubscriptions(
+        topics={
+            optics_topic.topic_id: optics_topic,
+            laser_topic.topic_id: laser_topic,
+        },
+        subscriptions=[
+            build_subscription(
+                name="张三",
+                email="zhangsan@example.com",
+                topic_id="optoelectronics",
+                keywords=["silicon photonics"],
+            ),
+            build_subscription(
+                name="李四",
+                email="lisi@example.com",
+                topic_id="lasers",
+                keywords=["laser"],
+            ),
+        ],
+    )
+
+    def pipeline_runner(settings: Settings) -> PipelineResult:
+        categories = tuple(settings.arxiv_categories)
+        seen_categories.append(categories)
+        if categories == ("physics.optics",):
+            return build_pipeline_result(
+                build_record("paper-1", matched_keywords=["silicon photonics"])
+            )
+        if categories == ("physics.app-ph",):
+            return build_pipeline_result(build_record("paper-2", matched_keywords=["laser"]))
+        raise AssertionError(f"unexpected categories: {categories!r}")
+
+    summary = run_application(
+        tmp_path,
+        settings_loader=lambda _: build_settings_for_main(db_path),
+        pipeline_runner=pipeline_runner,
+        email_sender=sender,
+        subscriptions_loader=lambda _: subscriptions,
+        smtp_password_getter=lambda: "secret",
+        now_func=lambda: datetime(2026, 6, 4, 13, 0, tzinfo=UTC),
+    )
+
+    assert seen_categories == [("physics.optics",), ("physics.app-ph",)]
+    assert "fetched=6" in summary
+    assert "matched=2" in summary
+    assert "to_push=2" in summary
+    assert len(sender.calls) == 2
+    assert {call[0].to_address for call in sender.calls} == {
+        "zhangsan@example.com",
+        "lisi@example.com",
+    }

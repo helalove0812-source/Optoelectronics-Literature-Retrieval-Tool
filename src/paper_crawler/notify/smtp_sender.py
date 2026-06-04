@@ -22,6 +22,7 @@ def send_email(
     subject: str,
     body: str,
     smtp_factory: Callable[[str, int], object] = smtplib.SMTP,
+    smtp_ssl_factory: Callable[[str, int], object] = smtplib.SMTP_SSL,
 ) -> None:
     message = EmailMessage()
     message["From"] = config.from_address
@@ -29,8 +30,10 @@ def send_email(
     message["Subject"] = subject
     message.set_content(body)
 
-    with smtp_factory(config.host, config.port) as smtp:
-        if config.use_tls:
+    factory = smtp_ssl_factory if config.port == 465 else smtp_factory
+
+    with factory(config.host, config.port) as smtp:
+        if config.port != 465 and config.use_tls:
             smtp.starttls()
         smtp.login(config.username, config.password)
         smtp.send_message(message)

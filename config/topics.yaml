@@ -1,0 +1,17 @@
+topics:
+  - topic_id: optoelectronics
+    name: 光电子
+    arxiv_categories:
+      - physics.optics
+      - physics.app-ph
+    openalex_filters:
+      - photonics
+    keyword_groups:
+      silicon_photonics:
+        - silicon photonics
+      emitter_detector:
+        - vcsel
+        - photodetector
+    synonyms:
+      vcsel:
+        - vertical-cavity surface-emitting laser
