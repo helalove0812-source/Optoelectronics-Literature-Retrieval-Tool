@@ -38,6 +38,8 @@ class Settings:
     synonyms: dict[str, list[str]]
     semantic_threshold: float
     enable_semantic_matching: bool
+    enable_tavily_fallback: bool = False
+    tavily_max_results: int = 5
 
 
 def _read_yaml(file_path: Path) -> dict[str, Any]:
@@ -81,4 +83,6 @@ def load_settings(config_dir: Path) -> Settings:
         synonyms=synonyms,
         semantic_threshold=float(runtime["semantic_threshold"]),
         enable_semantic_matching=bool(runtime["enable_semantic_matching"]),
+        enable_tavily_fallback=bool(runtime.get("enable_tavily_fallback", False)),
+        tavily_max_results=int(runtime.get("tavily_max_results", 5)),
     )

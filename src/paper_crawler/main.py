@@ -58,6 +58,9 @@ def build_summary_client(
 
 
 def _record_matches_keywords(record: PaperRecord, keywords: list[str]) -> bool:
+    if not keywords:
+        return True
+
     haystack = " ".join(
         [
             record.title.lower(),

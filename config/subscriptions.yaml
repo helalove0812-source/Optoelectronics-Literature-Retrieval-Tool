@@ -1,7 +1,10 @@
 subscriptions:
-  - name: 示例成员
-    email: member@example.com
+  - name: Hela
+    email: pengyk7@mail2.sysu.edu.cn
     topic_id: optoelectronics
     keywords:
-      - optical interconnect
-      - silicon photonics
+    
+  - name: Stone
+    email: lixsh63@mail2.sysu.edu.cn
+    topic_id: robotics
+    keywords:

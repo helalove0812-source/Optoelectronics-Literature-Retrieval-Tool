@@ -1,10 +1,12 @@
 from dataclasses import dataclass
 import logging
+import os
 from typing import Callable
 
 from paper_crawler.fetchers.arxiv import ArxivFetcher
 from paper_crawler.fetchers.crossref import CrossrefFetcher
 from paper_crawler.fetchers.openalex import OpenAlexFetcher
+from paper_crawler.fetchers.tavily import TavilyFetcher
 from paper_crawler.fetchers.unpaywall import UnpaywallClient
 from paper_crawler.matchers.keyword_matcher import build_keyword_index, match_keywords
 from paper_crawler.models import PaperRecord
@@ -51,6 +53,27 @@ def build_unpaywall_client(settings: Settings) -> UnpaywallClient:
     return UnpaywallClient(contact_email=settings.contact_email)
 
 
+def build_tavily_fetcher(
+    settings: Settings,
+    api_key_getter: Callable[[], str | None] = lambda: os.getenv("TAVILY_API_KEY"),
+) -> TavilyFetcher | None:
+    if not settings.enable_tavily_fallback:
+        return None
+
+    api_key = api_key_getter()
+    if not api_key:
+        logging.getLogger(__name__).warning(
+            "Tavily fallback is enabled but TAVILY_API_KEY is missing"
+        )
+        return None
+
+    return TavilyFetcher(
+        api_key=api_key,
+        keyword_groups=settings.keyword_groups,
+        max_results=settings.tavily_max_results,
+    )
+
+
 def run_pipeline(
     settings: Settings,
     arxiv_fetcher_factory: Callable[[Settings], ArxivFetcher] = build_arxiv_fetcher,
@@ -61,6 +84,7 @@ def run_pipeline(
     unpaywall_client_factory: Callable[
         [Settings], UnpaywallClient
     ] = build_unpaywall_client,
+    tavily_fetcher_factory: Callable[[Settings], TavilyFetcher | None] = build_tavily_fetcher,
 ) -> PipelineResult:
     records = []
 
@@ -81,6 +105,15 @@ def run_pipeline(
         records.extend(openalex_result.records)
     except Exception as exc:
         logging.getLogger(__name__).warning("OpenAlex fetch failed: %s", exc)
+
+    if not records and settings.enable_tavily_fallback:
+        try:
+            tavily_fetcher = tavily_fetcher_factory(settings)
+            if tavily_fetcher is not None:
+                tavily_result = tavily_fetcher.fetch()
+                records.extend(tavily_result.records)
+        except Exception as exc:
+            logging.getLogger(__name__).warning("Tavily fallback failed: %s", exc)
 
     if not records:
         return PipelineResult(fetched_count=0, matched_count=0, matched_records=[])

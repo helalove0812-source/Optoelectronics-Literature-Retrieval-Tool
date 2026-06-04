@@ -15,3 +15,20 @@ topics:
     synonyms:
       vcsel:
         - vertical-cavity surface-emitting laser
+  - topic_id: robotics
+    name: 机器人
+    arxiv_categories:
+      - cs.RO
+      - cs.AI
+    openalex_filters:
+      - robotics
+    keyword_groups:
+      robot_control:
+        - motion planning
+        - robot control
+      embodied_ai:
+        - embodied ai
+        - robot learning
+    synonyms:
+      vla:
+        - vision-language-action

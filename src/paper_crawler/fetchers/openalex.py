@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from time import sleep
@@ -13,6 +14,7 @@ from paper_crawler.utils.fingerprint import build_paper_fingerprint
 from paper_crawler.utils.time_utils import parse_utc_datetime, utc_now, within_lookback_window
 
 OPENALEX_API_URL = "https://api.openalex.org/works"
+logger = logging.getLogger(__name__)
 
 
 class SupportsGet(Protocol):
@@ -27,6 +29,7 @@ class OpenAlexFetcher(BaseFetcher):
     per_page: int = 200
     request_timeout: int = 30
     request_interval_seconds: int = 1
+    max_retry_attempts: int = 3
     session: SupportsGet | requests.Session | None = None
     sleep_func: Callable[[int], None] = sleep
     now_func: Callable[[], datetime] = utc_now
@@ -42,21 +45,68 @@ class OpenAlexFetcher(BaseFetcher):
             if index > 0:
                 self.sleep_func(self.request_interval_seconds)
 
-            response = session.get(
-                OPENALEX_API_URL,
-                params={
-                    "filter": f"{filter_fragment},from_created_date:{from_created_date}",
-                    "per-page": min(self.per_page, 200),
-                    "mailto": self.contact_email,
-                },
-                timeout=self.request_timeout,
+            response = self._request_with_retry(
+                session=session,
+                filter_fragment=filter_fragment,
+                from_created_date=from_created_date,
             )
-            response.raise_for_status()
             payload = response.json()
             results = payload.get("results", [])
             records.extend(self._parse_results(results=results, now=now))
 
         return FetchResult(source=self.source_name, records=records)
+
+    def _request_with_retry(
+        self,
+        session: SupportsGet | requests.Session,
+        filter_fragment: str,
+        from_created_date: str,
+    ) -> requests.Response | Any:
+        params = {
+            "filter": f"{filter_fragment},from_created_date:{from_created_date}",
+            "per-page": min(self.per_page, 100),
+            "mailto": self.contact_email,
+        }
+
+        for attempt in range(self.max_retry_attempts + 1):
+            response = session.get(
+                OPENALEX_API_URL,
+                params=params,
+                timeout=self.request_timeout,
+            )
+            try:
+                response.raise_for_status()
+                return response
+            except requests.HTTPError:
+                if getattr(response, "status_code", None) != 429:
+                    raise
+                if attempt >= self.max_retry_attempts:
+                    raise
+
+                wait_seconds = self._resolve_retry_delay(response, attempt)
+                logger.warning(
+                    "OpenAlex rate limited for filter=%s, attempt=%s/%s, "
+                    "retry_after=%s, remaining=%s, waiting=%ss",
+                    filter_fragment,
+                    attempt + 1,
+                    self.max_retry_attempts,
+                    getattr(response, "headers", {}).get("Retry-After"),
+                    getattr(response, "headers", {}).get("X-RateLimit-Remaining"),
+                    wait_seconds,
+                )
+                self.sleep_func(wait_seconds)
+
+        raise RuntimeError("unreachable")
+
+    @staticmethod
+    def _resolve_retry_delay(response: requests.Response | Any, attempt: int) -> int:
+        retry_after = getattr(response, "headers", {}).get("Retry-After")
+        if retry_after:
+            try:
+                return max(int(retry_after), 1)
+            except ValueError:
+                pass
+        return 5 * (2**attempt)
 
     def _parse_results(
         self, results: list[dict[str, Any]], now: datetime

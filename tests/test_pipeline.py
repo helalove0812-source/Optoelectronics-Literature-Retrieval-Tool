@@ -39,6 +39,16 @@ class DummyOpenAlexFetcher:
         return self.result
 
 
+class DummyTavilyFetcher:
+    def __init__(self, result: FetchResult):
+        self.result = result
+        self.called = False
+
+    def fetch(self) -> FetchResult:
+        self.called = True
+        return self.result
+
+
 class DummyUnpaywallClient:
     def __init__(self, response: dict[str, object]):
         self.response = response
@@ -482,3 +492,120 @@ def test_run_pipeline_returns_empty_result_when_arxiv_fetch_fails() -> None:
 
     assert result.fetched_count == 0
     assert result.matched_count == 0
+
+
+def test_run_pipeline_triggers_tavily_only_when_primary_sources_return_no_records(
+    tmp_path: Path,
+) -> None:
+    settings = build_settings()
+    settings.database_url = f"sqlite:///{tmp_path / 'papers.db'}"
+    settings.enable_tavily_fallback = True
+    settings.tavily_max_results = 5
+
+    tavily_record = build_record()
+    tavily_record.paper_id = "paper-tavily"
+    tavily_record.source = "tavily"
+    tavily_record.title = "Silicon photonics from tavily"
+    tavily_record.abstract = "Photonics integration for datacenter optics."
+    tavily_record.landing_url = "https://example.com/tavily"
+    tavily_record.pdf_url = None
+    tavily_record.access = "subscription"
+    tavily_fetcher = DummyTavilyFetcher(
+        FetchResult(source="tavily", records=[tavily_record])
+    )
+
+    result = run_pipeline(
+        settings,
+        arxiv_fetcher_factory=lambda _: DummyArxivFetcher(FetchResult(source="arxiv")),
+        crossref_fetcher_factory=lambda _: DummyCrossrefFetcher(
+            FetchResult(source="crossref")
+        ),
+        openalex_fetcher_factory=lambda _: DummyOpenAlexFetcher(
+            FetchResult(source="openalex")
+        ),
+        tavily_fetcher_factory=lambda _: tavily_fetcher,
+    )
+
+    assert tavily_fetcher.called is True
+    assert result.fetched_count == 1
+    assert result.matched_count == 1
+    assert [record.paper_id for record in result.matched_records] == ["paper-tavily"]
+
+
+def test_run_pipeline_skips_tavily_when_primary_sources_already_return_records(
+    tmp_path: Path,
+) -> None:
+    settings = build_settings()
+    settings.database_url = f"sqlite:///{tmp_path / 'papers.db'}"
+    settings.enable_tavily_fallback = True
+
+    tavily_fetcher = DummyTavilyFetcher(FetchResult(source="tavily", records=[]))
+
+    result = run_pipeline(
+        settings,
+        arxiv_fetcher_factory=lambda _: DummyArxivFetcher(
+            FetchResult(source="arxiv", records=[build_record()])
+        ),
+        crossref_fetcher_factory=lambda _: DummyCrossrefFetcher(
+            FetchResult(source="crossref")
+        ),
+        openalex_fetcher_factory=lambda _: DummyOpenAlexFetcher(
+            FetchResult(source="openalex")
+        ),
+        tavily_fetcher_factory=lambda _: tavily_fetcher,
+    )
+
+    assert tavily_fetcher.called is False
+    assert result.fetched_count == 1
+    assert result.matched_count == 1
+
+
+def test_run_pipeline_skips_tavily_when_fallback_is_disabled(tmp_path: Path) -> None:
+    settings = build_settings()
+    settings.database_url = f"sqlite:///{tmp_path / 'papers.db'}"
+    settings.enable_tavily_fallback = False
+
+    tavily_fetcher = DummyTavilyFetcher(FetchResult(source="tavily", records=[]))
+
+    result = run_pipeline(
+        settings,
+        arxiv_fetcher_factory=lambda _: DummyArxivFetcher(FetchResult(source="arxiv")),
+        crossref_fetcher_factory=lambda _: DummyCrossrefFetcher(
+            FetchResult(source="crossref")
+        ),
+        openalex_fetcher_factory=lambda _: DummyOpenAlexFetcher(
+            FetchResult(source="openalex")
+        ),
+        tavily_fetcher_factory=lambda _: tavily_fetcher,
+    )
+
+    assert tavily_fetcher.called is False
+    assert result.fetched_count == 0
+    assert result.matched_count == 0
+    assert result.matched_records == []
+
+
+def test_run_pipeline_continues_when_tavily_fallback_fails(tmp_path: Path) -> None:
+    class FailingTavilyFetcher:
+        def fetch(self) -> FetchResult:
+            raise RuntimeError("temporary tavily outage")
+
+    settings = build_settings()
+    settings.database_url = f"sqlite:///{tmp_path / 'papers.db'}"
+    settings.enable_tavily_fallback = True
+
+    result = run_pipeline(
+        settings,
+        arxiv_fetcher_factory=lambda _: DummyArxivFetcher(FetchResult(source="arxiv")),
+        crossref_fetcher_factory=lambda _: DummyCrossrefFetcher(
+            FetchResult(source="crossref")
+        ),
+        openalex_fetcher_factory=lambda _: DummyOpenAlexFetcher(
+            FetchResult(source="openalex")
+        ),
+        tavily_fetcher_factory=lambda _: FailingTavilyFetcher(),
+    )
+
+    assert result.fetched_count == 0
+    assert result.matched_count == 0
+    assert result.matched_records == []

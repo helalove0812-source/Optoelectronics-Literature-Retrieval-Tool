@@ -281,6 +281,38 @@ def test_run_application_skips_already_pushed_records(tmp_path: Path) -> None:
     assert rows == [("paper-1",), ("paper-2",)]
 
 
+def test_run_application_treats_empty_subscriber_keywords_as_all_topic_matches(
+    tmp_path: Path,
+) -> None:
+    db_path = tmp_path / "papers.db"
+    initialize_database(db_path)
+    sender = DummySender()
+    subscriptions = build_lab_subscriptions(
+        subscriptions=[
+            SubscriptionConfig(
+                name="订阅人",
+                email="user@example.com",
+                topic_id="optoelectronics",
+                keywords=[],
+            )
+        ]
+    )
+
+    summary = run_application(
+        tmp_path,
+        settings_loader=lambda _: build_settings_for_main(db_path),
+        pipeline_runner=lambda settings: build_pipeline_result(),
+        email_renderer=lambda records: f"Matched papers: {len(records)}",
+        email_sender=sender,
+        subscriptions_loader=lambda _: subscriptions,
+        smtp_password_getter=lambda: "secret",
+    )
+
+    assert "to_push=2" in summary
+    assert "email_sent=yes" in summary
+    assert len(sender.calls) == 1
+
+
 def test_run_application_does_not_send_empty_email_when_no_records_to_push(
     tmp_path: Path,
 ) -> None:

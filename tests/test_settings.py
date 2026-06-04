@@ -74,6 +74,84 @@ def test_load_settings_reads_smtp_and_llm_fields_from_temp_config(tmp_path: Path
     assert settings.llm.timeout_seconds == 45
 
 
+def test_load_settings_reads_tavily_runtime_fields(tmp_path: Path) -> None:
+    config_dir = tmp_path / "config"
+    config_dir.mkdir()
+    config_dir.joinpath("config.yaml").write_text(
+        "\n".join(
+            [
+                "contact_email: test@example.com",
+                "database_url: sqlite:///data/test.db",
+                "smtp:",
+                "  host: smtp.test.local",
+                "  port: 2525",
+                "  username: sender@test.local",
+                "  from_address: sender@test.local",
+                "  to_address: receiver@test.local",
+                "  use_tls: false",
+                "runtime:",
+                "  lookback_hours: 12",
+                "  semantic_threshold: 0.7",
+                "  enable_semantic_matching: false",
+                "  enable_tavily_fallback: true",
+                "  tavily_max_results: 7",
+                "sources:",
+                "  arxiv_categories:",
+                "    - physics.optics",
+                "  openalex_filters:",
+                "    - concepts.id:C123",
+            ]
+        ),
+        encoding="utf-8",
+    )
+    config_dir.joinpath("keywords.yaml").write_text("硅光:\n  - silicon photonics\n", encoding="utf-8")
+    config_dir.joinpath("issn_whitelist.yaml").write_text("{}", encoding="utf-8")
+    config_dir.joinpath("synonyms.yaml").write_text("{}", encoding="utf-8")
+
+    settings = load_settings(config_dir)
+
+    assert settings.enable_tavily_fallback is True
+    assert settings.tavily_max_results == 7
+
+
+def test_load_settings_defaults_tavily_runtime_fields_when_omitted(tmp_path: Path) -> None:
+    config_dir = tmp_path / "config"
+    config_dir.mkdir()
+    config_dir.joinpath("config.yaml").write_text(
+        "\n".join(
+            [
+                "contact_email: test@example.com",
+                "database_url: sqlite:///data/test.db",
+                "smtp:",
+                "  host: smtp.test.local",
+                "  port: 2525",
+                "  username: sender@test.local",
+                "  from_address: sender@test.local",
+                "  to_address: receiver@test.local",
+                "  use_tls: false",
+                "runtime:",
+                "  lookback_hours: 12",
+                "  semantic_threshold: 0.7",
+                "  enable_semantic_matching: false",
+                "sources:",
+                "  arxiv_categories:",
+                "    - physics.optics",
+                "  openalex_filters:",
+                "    - concepts.id:C123",
+            ]
+        ),
+        encoding="utf-8",
+    )
+    config_dir.joinpath("keywords.yaml").write_text("硅光:\n  - silicon photonics\n", encoding="utf-8")
+    config_dir.joinpath("issn_whitelist.yaml").write_text("{}", encoding="utf-8")
+    config_dir.joinpath("synonyms.yaml").write_text("{}", encoding="utf-8")
+
+    settings = load_settings(config_dir)
+
+    assert settings.enable_tavily_fallback is False
+    assert settings.tavily_max_results == 5
+
+
 def test_load_settings_remains_compatible_with_existing_config_files(
     tmp_path: Path,
 ) -> None:

@@ -1,22 +1,29 @@
-contact_email: team@example.com
-database_url: sqlite:///data/papers.db
+contact_email: pengyk0812@foxmail.com
+
+database_url: sqlite:///dhaolata/papers.db
+
 smtp:
-  host: smtp.example.com
-  port: 587
-  username: research-alert@example.com
-  from_address: research-alert@example.com
-  to_address: user@example.com
+  host: smtp.qq.com
+  port: 465
+  username: pengyk0812@foxmail.com
+  from_address: pengyk0812@foxmail.com
+  to_address: pengyk7@mail2.sysu.edu.cn
   use_tls: true
+
 llm:
-  enabled: false
+  enabled: true
   provider: deepseek
   base_url: https://api.deepseek.com
   model: deepseek-chat
   timeout_seconds: 30
+
 runtime:
   lookback_hours: 24
   semantic_threshold: 0.5
   enable_semantic_matching: true
+  enable_tavily_fallback: true
+  tavily_max_results: 5
+
 sources:
   arxiv_categories:
     - physics.optics
